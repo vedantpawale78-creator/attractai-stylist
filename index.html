@@ -69,31 +69,29 @@
                 analyzeImage();
             };
 
-            const analyzeImage = () => {
+            const analyzeImage = async () => {
                 setAnalyzing(true);
-                // Mock API call to Gemini/Imagen (<3s response)
-                setTimeout(() => {
-                    setResults({
-                        score: 82,
-                        analysis: {
-                            face: "Symmetric features with a distinct jawline. Skin tone is even but could benefit from hydration.",
-                            body: "Athletic/Proportionate build. Posture is slightly slouched.",
-                            overall: "High baseline attractiveness with great potential through minor styling tweaks."
-                        },
-                        suggestions: {
-                            Clothes: ["Tailored navy blazer for sharper silhouette", "Slim-fit dark wash jeans", "Minimalist white sneakers", "Earth-tone knit polo"],
-                            Hairstyle: ["Textured crop with a mid fade", "Use matte styling clay for definition", "Trim sideburns to align with cheekbones"],
-                            Glasses: ["Geometric wireframes", "Tortoise shell clubmasters to contrast face shape"],
-                            Makeup: ["Light BB cream for even skin tone", "Matte lip balm", "Subtle brow gel for definition"]
-                        },
-                        improvements: [
-                            "Improve posture: pull shoulders back to broaden chest.",
-                            "Skincare routine: Add a daily vitamin C serum and moisturizer.",
-                            "Grooming: Keep facial hair trimmed to 3mm for a structured shadow."
-                        ]
+                try {
+                    const res = await fetch('/api/analyze', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ imageBase64: preview })
                     });
+                    
+                    if (!res.ok) {
+                        const err = await res.json();
+                        throw new Error(err.error || 'Failed to analyze image');
+                    }
+                    
+                    const data = await res.json();
+                    setResults(data);
+                } catch (error) {
+                    console.error("Analysis failed:", error);
+                    alert("Analysis stopped: " + error.message + "\nMake sure GEMINI_API_KEY is configured.");
+                    setResults(null);
+                } finally {
                     setAnalyzing(false);
-                }, 2500);
+                }
             };
 
             return (
@@ -129,7 +127,7 @@
                             >
                                 <div className="w-20 h-20 border-4 border-slate-700 border-t-brand-500 rounded-full animate-spin mb-8"></div>
                                 <h3 className="text-2xl font-medium text-white mb-2">Analyzing Features...</h3>
-                                <p className="text-slate-400">Scanning facial symmetry, body proportions, and styling vectors (Powered by Gemini Vision)</p>
+                                <p className="text-slate-400">Scanning facial symmetry, body proportions, and styling vectors (Powered by Gemini)</p>
                             </motion.div>
                         )}
 
@@ -146,14 +144,14 @@
                                     <div className="glass p-6 text-center">
                                         <p className="text-slate-400 uppercase tracking-widest text-xs font-bold mb-3">Aesthetic Score</p>
                                         <div className="text-7xl font-bold gradient-text mb-2">{results.score}</div>
-                                        <div className="w-full bg-slate-800 rounded-full h-2 mb-3"><div className="bg-gradient-to-r from-brand-500 to-brand-600 h-2 rounded-full" style={{width: `${results.score}%`}}></div></div>
-                                        <p className="text-xs text-emerald-400 font-medium">Top 18% aesthetic potential</p>
+                                        <div className="w-full bg-slate-800 rounded-full h-2 mb-3"><div className="bg-gradient-to-r from-brand-500 to-brand-600 h-2 rounded-full" style={{width: `${Math.min(100, Math.max(0, results.score || 0))}%`}}></div></div>
+                                        <p className="text-xs text-brand-400 font-medium">{results.confidence ? `AI Confidence: ${results.confidence}%` : 'Top tier aesthetic potential'}</p>
                                     </div>
                                 </div>
 
                                 <div className="lg:w-2/3 glass p-2 flex flex-col">
                                     <div className="flex border-b border-white/10 p-2 overflow-x-auto gap-2">
-                                        {['Analysis', 'Suggestions', 'Improvements', 'Profile'].map(tab => (
+                                        {['Analysis', 'Outfit', 'Tips', 'Profile'].map(tab => (
                                             <button 
                                                 key={tab}
                                                 onClick={() => setActiveTab(tab)}
@@ -170,53 +168,78 @@
                                                 <motion.div key="Analysis" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} className="space-y-4">
                                                     <div className="glass-panel p-5">
                                                         <h4 className="text-brand-400 mb-2 font-bold text-sm uppercase tracking-wider">Face</h4>
-                                                        <p className="text-slate-300 text-sm leading-relaxed">{results.analysis.face}</p>
+                                                        <p className="text-slate-300 text-sm leading-relaxed">{results.face || 'Analysis pending...'}</p>
                                                     </div>
                                                     <div className="glass-panel p-5">
                                                         <h4 className="text-brand-400 mb-2 font-bold text-sm uppercase tracking-wider">Body</h4>
-                                                        <p className="text-slate-300 text-sm leading-relaxed">{results.analysis.body}</p>
+                                                        <p className="text-slate-300 text-sm leading-relaxed">{results.body || 'Analysis pending...'}</p>
                                                     </div>
-                                                    <div className="glass-panel p-5">
-                                                        <h4 className="text-brand-400 mb-2 font-bold text-sm uppercase tracking-wider">Overall</h4>
-                                                        <p className="text-slate-300 text-sm leading-relaxed">{results.analysis.overall}</p>
-                                                    </div>
+                                                    {results.why && (
+                                                        <div className="glass-panel p-5 border border-brand-500/30">
+                                                            <h4 className="text-brand-400 mb-2 font-bold text-sm uppercase tracking-wider">Why It Works</h4>
+                                                            <p className="text-slate-300 text-sm leading-relaxed">{results.why}</p>
+                                                        </div>
+                                                    )}
                                                 </motion.div>
                                             )}
 
-                                            {activeTab === 'Suggestions' && (
-                                                <motion.div key="Suggestions" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                    {Object.entries(results.suggestions).map(([category, items]) => (
-                                                        <div key={category} className="glass-panel p-5">
-                                                            <h4 className="text-white mb-3 font-semibold pb-2 border-b border-white/10">{category}</h4>
+                                            {activeTab === 'Outfit' && (
+                                                <motion.div key="Outfit" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} className="space-y-4">
+                                                    {results.outfit ? (
+                                                        <div className="glass-panel p-5 border-l-4 border-l-brand-500">
+                                                            <h4 className="text-white mb-3 font-semibold pb-2 border-b border-white/10">Daily Recommendation</h4>
                                                             <ul className="space-y-3">
-                                                                {items.map((item, i) => (
-                                                                    <li key={i} className="text-slate-300 text-sm flex items-start gap-2">
-                                                                        <span className="text-brand-500 mt-0.5">&rarr;</span> <a href="#" className="hover:text-brand-400 transition-colors underline decoration-brand-500/30 underline-offset-4">{item}</a>
-                                                                    </li>
-                                                                ))}
+                                                                <li className="text-slate-300 text-sm flex items-start gap-2"><span className="text-brand-500 font-medium">Top:</span> {results.outfit.top}</li>
+                                                                <li className="text-slate-300 text-sm flex items-start gap-2"><span className="text-brand-500 font-medium">Bottom:</span> {results.outfit.bottom}</li>
+                                                                <li className="text-slate-300 text-sm flex items-start gap-2"><span className="text-brand-500 font-medium">Footwear:</span> {results.outfit.footwear}</li>
+                                                                <li className="text-slate-300 text-sm flex items-start gap-2"><span className="text-brand-500 font-medium">Accessories:</span> {results.outfit.accessories}</li>
                                                             </ul>
                                                         </div>
-                                                    ))}
-                                                    <div className="col-span-full glass-panel p-5 mt-2 flex justify-between items-center border border-brand-500/30 bg-brand-500/5">
-                                                        <div>
-                                                            <h4 className="text-white font-semibold">Ready to test these out?</h4>
-                                                            <p className="text-slate-400 text-sm mt-1">Generate AI previews using Imagen 3</p>
+                                                    ) : (
+                                                        <p className="text-slate-400">No outfit suggestions available.</p>
+                                                    )}
+
+                                                    {results.colors && (
+                                                        <div className="glass-panel p-5 bg-gradient-to-r from-brand-600/10 to-transparent">
+                                                            <h4 className="text-white mb-2 font-semibold">Color Strategy</h4>
+                                                            <div className="flex gap-4 mb-2">
+                                                                <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-slate-200"></span><span className="text-sm text-slate-300">Primary: {results.colors.primary}</span></div>
+                                                                <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-brand-500"></span><span className="text-sm text-slate-300">Accent: {results.colors.accent}</span></div>
+                                                            </div>
+                                                            <p className="text-xs text-slate-400 mt-2">{results.colors.reason}</p>
                                                         </div>
-                                                        <button className="gradient-bg text-white px-6 py-2 rounded-lg font-medium shadow-lg hover:opacity-90 transition-opacity">Generate Previews</button>
-                                                    </div>
+                                                    )}
+                                                    
+                                                    {results.alternative && (
+                                                        <div className="glass-panel p-5 opacity-80 mt-2">
+                                                            <h4 className="text-white mb-3 font-semibold pb-2 border-b border-white/10">Alternative Style</h4>
+                                                            <ul className="space-y-3">
+                                                                <li className="text-slate-300 text-sm"><span className="text-brand-400">Top:</span> {results.alternative.top}</li>
+                                                                <li className="text-slate-300 text-sm"><span className="text-brand-400">Bottom:</span> {results.alternative.bottom}</li>
+                                                                <li className="text-slate-300 text-sm"><span className="text-brand-400">Footwear:</span> {results.alternative.footwear}</li>
+                                                            </ul>
+                                                        </div>
+                                                    )}
                                                 </motion.div>
                                             )}
 
-                                            {activeTab === 'Improvements' && (
-                                                <motion.div key="Improvements" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} className="space-y-4">
-                                                    {results.improvements.map((imp, i) => (
+                                            {activeTab === 'Tips' && (
+                                                <motion.div key="Tips" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} className="space-y-4">
+                                                    {(results.tips || []).map((tip, i) => (
                                                         <div key={i} className="glass-panel p-5 border-l-4 border-l-brand-500 flex items-center gap-4">
                                                             <div className="bg-brand-500/20 text-brand-400 w-10 h-10 shrink-0 rounded-full flex items-center justify-center font-bold">
                                                                 {i + 1}
                                                             </div>
-                                                            <p className="text-slate-300 text-sm">{imp}</p>
+                                                            <p className="text-slate-300 text-sm">{tip}</p>
                                                         </div>
                                                     ))}
+                                                    
+                                                    {results.upgrade && (
+                                                        <div className="glass-panel p-5 mt-4 border border-emerald-500/30 bg-emerald-500/5">
+                                                            <h4 className="text-emerald-400 mb-2 font-bold text-sm uppercase tracking-wider">⚡ Quick Upgrade</h4>
+                                                            <p className="text-slate-300 text-sm leading-relaxed">{results.upgrade}</p>
+                                                        </div>
+                                                    )}
                                                 </motion.div>
                                             )}
 
